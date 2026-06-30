@@ -69,7 +69,7 @@ Delivery Funnel, and Delivery vs. Reviews.
   order, a **repeat-purchase rate of 3.0%**.
 - Olist works as a single-purchase marketplace. Cohort retention falls below 1%
   from month 1 onward.
-- ⚠️ You see this only when you key on `customer_unique_id`. The dataset
+- This shows up only when you key on `customer_unique_id`. The dataset
   regenerates `customer_id` for each order, so keying on it forces retention to
   ~0% by construction.
 
@@ -112,7 +112,7 @@ On-time delivery is associated with higher review scores, with a large and
 well-estimated effect. Delivery timeliness is the most actionable lever for
 review quality.
 
-> ⚠️ This comparison is observational, not a randomized experiment. On-time
+> **Note.** This comparison is observational, not a randomized experiment. On-time
 > versus late is not randomly assigned, so the result shows association rather
 > than proven causation: lateness correlates with shipping distance and region,
 > freight, product category, and seasonality, and only reviewed orders enter the
@@ -128,7 +128,7 @@ review quality.
 
 ## Live dashboard
 
-🔗 **Streamlit Cloud:** _TODO: add deployment link here_
+**Streamlit Cloud:** https://olist-analytics-hilhool.streamlit.app/
 
 ## License
 

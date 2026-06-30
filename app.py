@@ -3,17 +3,53 @@
 Reads pre-computed result CSVs from analytics/exports/ (produced by the analysis
 notebook) so the app runs anywhere without the raw dataset, including on
 Streamlit Cloud. Charts use Plotly.
+
+Visual system (kept deliberately small and reused everywhere):
+  - One neutral slate-blue PRIMARY for most series.
+  - Exactly two semantic colors, POSITIVE / NEGATIVE, used only for MoM
+    up/down and on-time/late comparisons.
+  - A single Plotly template ("plotly_white") with consistent margins/titles.
 """
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 import streamlit as st
 
 EXPORT_DIR = Path(__file__).parent / "analytics" / "exports"
 
-st.set_page_config(page_title="Olist Analytics", page_icon="📦", layout="wide")
+st.set_page_config(page_title="Olist Analytics", layout="wide")
+
+# --- Color system -----------------------------------------------------------
+PRIMARY = "#3D5A80"   # calm slate blue, the default for most series
+POSITIVE = "#3F7D5A"  # muted green, only for MoM up / on-time
+NEGATIVE = "#B4574A"  # muted brick, only for MoM down / late
+
+# Four RFM segments, kept distinguishable within the restrained palette.
+SEGMENT_COLORS = {
+    "Champions": "#2E4A6B",
+    "Loyal": "#6E8CAE",
+    "At Risk": "#C2A05B",
+    "Lost": "#9AA0A8",
+}
+
+# Single consistent Plotly look applied to every chart.
+pio.templates.default = "plotly_white"
+px.defaults.template = "plotly_white"
+
+
+def style(fig: go.Figure) -> go.Figure:
+    """Apply consistent margins, fonts, and a quiet title to a figure."""
+    fig.update_layout(
+        font=dict(color="#1F2933", size=13),
+        title=dict(font=dict(size=16, color="#1F2933"), x=0, xanchor="left"),
+        margin=dict(l=10, r=10, t=48, b=10),
+        legend=dict(title_text=""),
+        colorway=[PRIMARY],
+    )
+    return fig
 
 
 @st.cache_data
@@ -29,22 +65,14 @@ def load(name: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-# Brand-ish palette for the 4 RFM segments
-SEGMENT_COLORS = {
-    "Champions": "#2ca02c",
-    "Loyal": "#1f77b4",
-    "At Risk": "#ff7f0e",
-    "Lost": "#d62728",
-}
-
-st.title("📦 Olist E-Commerce Analytics")
+st.title("Olist E-Commerce Analytics")
 st.caption(
-    "Brazilian marketplace (2016–2018). Revenue trends, retention, RFM "
+    "Brazilian marketplace (2016-2018). Revenue trends, retention, RFM "
     "segmentation, and how late delivery relates to review scores."
 )
 
 tab_rev, tab_rfm, tab_retention, tab_funnel, tab_ab = st.tabs(
-    ["💰 Revenue", "🎯 RFM Segments", "📈 Retention", "🚚 Delivery Funnel", "🧪 Delivery vs. Reviews"]
+    ["Revenue", "RFM Segments", "Retention", "Delivery Funnel", "Delivery vs. Reviews"]
 )
 
 # ----------------------------------------------------------------- Revenue tab
@@ -63,24 +91,25 @@ with tab_rev:
     fig.add_trace(
         go.Scatter(
             x=rev["month"], y=rev["revenue"], mode="lines+markers",
-            name="Revenue", line=dict(color="#1f77b4", width=3),
+            name="Revenue", line=dict(color=PRIMARY, width=2.5),
+            marker=dict(size=6),
         )
     )
     fig.update_layout(
         title="Monthly delivered revenue / GMV (BRL)",
         xaxis_title="Month", yaxis_title="Revenue (R$)", hovermode="x unified",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(style(fig), use_container_width=True)
 
     rev_mom = rev.dropna(subset=["mom_growth_pct"])
-    mom_colors = ["#2ca02c" if v >= 0 else "#d62728" for v in rev_mom["mom_growth_pct"]]
+    mom_colors = [POSITIVE if v >= 0 else NEGATIVE for v in rev_mom["mom_growth_pct"]]
     fig_mom = px.bar(
         rev_mom, x="month", y="mom_growth_pct",
         title="Month-over-month revenue growth (%)",
         labels={"mom_growth_pct": "MoM growth (%)", "month": "Month"},
     )
     fig_mom.update_traces(marker_color=mom_colors)
-    st.plotly_chart(fig_mom, use_container_width=True)
+    st.plotly_chart(style(fig_mom), use_container_width=True)
 
     with st.expander("Monthly data"):
         st.dataframe(rev, use_container_width=True)
@@ -98,7 +127,7 @@ with tab_rfm:
             title="Customers by RFM segment",
             color="segment", color_discrete_map=SEGMENT_COLORS,
         )
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(style(fig_pie), use_container_width=True)
     with right:
         fig_rev = px.bar(
             seg.sort_values("pct_revenue"), x="pct_revenue", y="segment",
@@ -106,12 +135,13 @@ with tab_rfm:
             color="segment", color_discrete_map=SEGMENT_COLORS,
             labels={"pct_revenue": "Revenue share (%)", "segment": ""},
         )
-        st.plotly_chart(fig_rev, use_container_width=True)
+        fig_rev.update_layout(showlegend=False)
+        st.plotly_chart(style(fig_rev), use_container_width=True)
 
-    st.info(
-        f"Repeat-purchase rate (by `customer_unique_id`): **{repeat_rate:.1f}%**. "
+    st.caption(
+        f"Repeat-purchase rate (by customer_unique_id): {repeat_rate:.1f}%. "
         "Olist is a single-purchase marketplace, so the segments rest on Recency "
-        "and Monetary value (Frequency ≈ 1)."
+        "and Monetary value (Frequency is about 1)."
     )
     st.dataframe(seg, use_container_width=True)
 
@@ -127,8 +157,8 @@ with tab_retention:
         color_continuous_scale="Blues", aspect="auto",
         title="Cohort retention (% of each cohort ordering again, by month offset)",
     )
-    st.plotly_chart(fig_heat, use_container_width=True)
-    st.info(
+    st.plotly_chart(style(fig_heat), use_container_width=True)
+    st.caption(
         "Month 0 is 100% by definition. From month 1 onward retention sits well "
         "under 1% across every cohort, matching the ~3% overall repeat rate. "
         "Growth here comes from acquisition rather than retention."
@@ -143,11 +173,11 @@ with tab_funnel:
         go.Funnel(
             y=funnel["stage"], x=funnel["orders"],
             textinfo="value+percent initial",
-            marker=dict(color="#1f77b4"),
+            marker=dict(color=PRIMARY),
         )
     )
     fig_f.update_layout(title="Order delivery funnel")
-    st.plotly_chart(fig_f, use_container_width=True)
+    st.plotly_chart(style(fig_f), use_container_width=True)
 
     late = load("delivery_late_vs_score.csv")
     c1, c2 = st.columns([1, 1])
@@ -155,12 +185,13 @@ with tab_funnel:
         fig_late = px.bar(
             late, x="delivery_status", y="avg_review_score", color="delivery_status",
             title="Average review score: on-time vs late",
-            color_discrete_map={"On time": "#2ca02c", "Late": "#d62728"},
+            color_discrete_map={"On time": POSITIVE, "Late": NEGATIVE},
             labels={"avg_review_score": "Avg review score", "delivery_status": ""},
             text="avg_review_score",
         )
         fig_late.update_yaxes(range=[1, 5])
-        st.plotly_chart(fig_late, use_container_width=True)
+        fig_late.update_layout(showlegend=False)
+        st.plotly_chart(style(fig_late), use_container_width=True)
     with c2:
         st.dataframe(funnel, use_container_width=True)
         st.dataframe(late, use_container_width=True)
@@ -189,13 +220,13 @@ with tab_ab:
     c4.metric("p-value", p_display)
 
     verdict = "statistically significant" if (p_value < 0.05) else "not significant"
-    st.success(
+    st.markdown(
         f"On-time orders receive higher review scores. The difference is "
         f"**{verdict}** (Mann-Whitney U, p {p_display}) with a **{effect}** "
-        f"effect size (Cliff's δ = {delta:.3f}, 95% CI [{ci_low:.3f}, {ci_high:.3f}])."
+        f"effect size (Cliff's delta = {delta:.3f}, 95% CI [{ci_low:.3f}, {ci_high:.3f}])."
     )
-    st.warning(
-        "⚠️ This is an **observational** comparison, not a randomized A/B test. "
+    st.caption(
+        "This is an observational comparison, not a randomized A/B test. "
         "On-time vs. late is not randomly assigned, so it measures association "
         "rather than proven causation. Lateness ties in with distance, freight, "
         "product category, and seasonality. On-time is also relative to Olist's "
@@ -205,10 +236,10 @@ with tab_ab:
     fig_dist = px.bar(
         dist, x="review_score", y="pct_within_group", color="delivery_status",
         barmode="group", title="Review score distribution by delivery status (%)",
-        color_discrete_map={"On time": "#2ca02c", "Late": "#d62728"},
+        color_discrete_map={"On time": POSITIVE, "Late": NEGATIVE},
         labels={"pct_within_group": "% within group", "review_score": "Review score"},
     )
-    st.plotly_chart(fig_dist, use_container_width=True)
+    st.plotly_chart(style(fig_dist), use_container_width=True)
 
     with st.expander("Full test results"):
         st.dataframe(res.reset_index(), use_container_width=True)
