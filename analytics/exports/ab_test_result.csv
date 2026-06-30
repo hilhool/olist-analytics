@@ -1,0 +1,13 @@
+metric,value
+n_on_time,88653
+n_late,7700
+median_on_time,5.0
+median_late,2.0
+mean_on_time,4.294
+mean_late,2.566
+u_statistic,530208489.0
+p_value,0.0
+cliffs_delta,0.5534
+cliffs_delta_ci_low,0.5422
+cliffs_delta_ci_high,0.5647
+effect_size,large

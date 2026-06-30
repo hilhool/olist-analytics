@@ -1,0 +1,5 @@
+segment,customers,avg_recency_days,avg_frequency,avg_monetary,total_revenue,pct_revenue
+Champions,24019,160.0,1.07,264.63,6356152.39,41.2
+At Risk,21735,413.0,1.0,264.36,5745923.18,37.3
+Loyal,23917,173.0,1.06,75.51,1805885.82,11.7
+Lost,23687,413.0,1.0,63.82,1511812.36,9.8
