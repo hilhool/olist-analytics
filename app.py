@@ -18,7 +18,15 @@ st.set_page_config(page_title="Olist Analytics", page_icon="📦", layout="wide"
 
 @st.cache_data
 def load(name: str) -> pd.DataFrame:
-    return pd.read_csv(EXPORT_DIR / name)
+    """Load an export CSV, or stop the app with a clear message if it's missing."""
+    path = EXPORT_DIR / name
+    if not path.exists():
+        st.error(
+            f"Missing export file: `{name}`. "
+            "Run `analytics/raw.ipynb` to regenerate `analytics/exports/`."
+        )
+        st.stop()
+    return pd.read_csv(path)
 
 
 # Brand-ish palette for the 4 RFM segments
@@ -32,11 +40,11 @@ SEGMENT_COLORS = {
 st.title("📦 Olist E-Commerce Analytics")
 st.caption(
     "Brazilian marketplace (2016–2018). Revenue trends, retention, RFM "
-    "segmentation, and an A/B test on how late delivery affects review scores."
+    "segmentation, and how late delivery relates to review scores."
 )
 
-tab_rev, tab_rfm, tab_funnel, tab_ab = st.tabs(
-    ["💰 Revenue", "🎯 RFM Segments", "🚚 Delivery Funnel", "🧪 A/B Test"]
+tab_rev, tab_rfm, tab_retention, tab_funnel, tab_ab = st.tabs(
+    ["💰 Revenue", "🎯 RFM Segments", "📈 Retention", "🚚 Delivery Funnel", "🧪 Delivery vs. Reviews"]
 )
 
 # ----------------------------------------------------------------- Revenue tab
@@ -45,7 +53,7 @@ with tab_rev:
     rev["month"] = pd.to_datetime(rev["month"])
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total delivered revenue", f"R$ {rev['revenue'].sum():,.0f}")
+    c1.metric("Total delivered GMV", f"R$ {rev['revenue'].sum():,.0f}")
     c2.metric("Total orders", f"{rev['orders'].sum():,.0f}")
     # Median, not mean: the 2016 ramp-up months (revenue near zero) produce
     # five-digit MoM percentages that make the mean meaningless.
@@ -59,20 +67,19 @@ with tab_rev:
         )
     )
     fig.update_layout(
-        title="Monthly delivered revenue (BRL)",
+        title="Monthly delivered revenue / GMV (BRL)",
         xaxis_title="Month", yaxis_title="Revenue (R$)", hovermode="x unified",
     )
     st.plotly_chart(fig, use_container_width=True)
 
+    rev_mom = rev.dropna(subset=["mom_growth_pct"])
+    mom_colors = ["#2ca02c" if v >= 0 else "#d62728" for v in rev_mom["mom_growth_pct"]]
     fig_mom = px.bar(
-        rev.dropna(subset=["mom_growth_pct"]), x="month", y="mom_growth_pct",
+        rev_mom, x="month", y="mom_growth_pct",
         title="Month-over-month revenue growth (%)",
         labels={"mom_growth_pct": "MoM growth (%)", "month": "Month"},
     )
-    fig_mom.update_traces(
-        marker_color=rev.dropna(subset=["mom_growth_pct"])["mom_growth_pct"]
-        .apply(lambda v: "#2ca02c" if v >= 0 else "#d62728")
-    )
+    fig_mom.update_traces(marker_color=mom_colors)
     st.plotly_chart(fig_mom, use_container_width=True)
 
     with st.expander("Monthly data"):
@@ -81,11 +88,8 @@ with tab_rev:
 # --------------------------------------------------------------------- RFM tab
 with tab_rfm:
     seg = load("rfm_segments.csv")
-    try:
-        rr = load("repeat_rate.csv")
-        repeat_rate = rr["repeat_rate_pct"].iloc[0]
-    except Exception:
-        repeat_rate = None
+    rr = load("repeat_rate.csv")
+    repeat_rate = float(rr["repeat_rate_pct"].iloc[0])
 
     left, right = st.columns([1, 1])
     with left:
@@ -104,13 +108,33 @@ with tab_rfm:
         )
         st.plotly_chart(fig_rev, use_container_width=True)
 
-    if repeat_rate is not None:
-        st.info(
-            f"Repeat-purchase rate (by `customer_unique_id`): **{repeat_rate}%** "
-            "— Olist is an overwhelmingly single-purchase marketplace, so "
-            "segments are driven mainly by Recency and Monetary value."
-        )
+    st.info(
+        f"Repeat-purchase rate (by `customer_unique_id`): **{repeat_rate:.1f}%** "
+        "— Olist is an overwhelmingly single-purchase marketplace, so segments "
+        "are driven mainly by Recency and Monetary value (Frequency ≈ 1)."
+    )
     st.dataframe(seg, use_container_width=True)
+
+# --------------------------------------------------------------- Retention tab
+with tab_retention:
+    ret = load("cohort_retention.csv")
+    pivot = ret.pivot(index="cohort_month", columns="month_offset",
+                      values="retention_pct")
+    fig_heat = px.imshow(
+        pivot,
+        labels=dict(x="Months since first order", y="Cohort (first-order month)",
+                    color="Retention %"),
+        color_continuous_scale="Blues", aspect="auto",
+        title="Cohort retention (% of each cohort ordering again, by month offset)",
+    )
+    st.plotly_chart(fig_heat, use_container_width=True)
+    st.info(
+        "Month 0 is 100% by definition. Retention collapses to well under 1% "
+        "from month 1 onward across every cohort — consistent with the ~3% "
+        "overall repeat rate. The business is acquisition-driven, not retention-driven."
+    )
+    with st.expander("Cohort data"):
+        st.dataframe(ret, use_container_width=True)
 
 # ------------------------------------------------------------------ Funnel tab
 with tab_funnel:
@@ -141,7 +165,7 @@ with tab_funnel:
         st.dataframe(funnel, use_container_width=True)
         st.dataframe(late, use_container_width=True)
 
-# -------------------------------------------------------------------- A/B test
+# ----------------------------------------------------- Delivery vs. reviews tab
 with tab_ab:
     res = load("ab_test_result.csv").set_index("metric")["value"]
     dist = load("ab_test_scores.csv")
@@ -149,19 +173,33 @@ with tab_ab:
     p_value = float(res["p_value"])
     delta = float(res["cliffs_delta"])
     effect = str(res["effect_size"])
+    ci_low = float(res["cliffs_delta_ci_low"])
+    ci_high = float(res["cliffs_delta_ci_high"])
+    median_on = float(res["median_on_time"])
+    median_late = float(res["median_late"])
+    # Honest p-value string (scipy underflows the true value to 0.0).
+    p_display = str(res["p_value_display"]) if "p_value_display" in res.index else (
+        "< 1e-300" if p_value == 0 else f"{p_value:.2e}"
+    )
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Median (on time)", res["median_on_time"])
-    c2.metric("Median (late)", res["median_late"])
+    c1.metric("Median (on time)", f"{median_on:.0f}")
+    c2.metric("Median (late)", f"{median_late:.0f}")
     c3.metric("Cliff's delta", f"{delta:.3f}", help=f"Effect size: {effect}")
-    c4.metric("p-value", f"{p_value:.2e}")
+    c4.metric("p-value", p_display)
 
-    verdict = "statistically significant" if p_value < 0.05 else "not significant"
+    verdict = "statistically significant" if (p_value < 0.05) else "not significant"
     st.success(
         f"On-time orders receive higher review scores — the difference is "
-        f"**{verdict}** (Mann-Whitney U, p = {p_value:.2e}) with a **{effect}** "
-        f"effect size (Cliff's δ = {delta:.3f}, 95% CI "
-        f"[{res['cliffs_delta_ci_low']}, {res['cliffs_delta_ci_high']}])."
+        f"**{verdict}** (Mann-Whitney U, p {p_display}) with a **{effect}** "
+        f"effect size (Cliff's δ = {delta:.3f}, 95% CI [{ci_low:.3f}, {ci_high:.3f}])."
+    )
+    st.warning(
+        "⚠️ This is an **observational** comparison, not a randomized A/B test. "
+        "On-time vs. late is not randomly assigned, so this measures association, "
+        "not proven causation — lateness is confounded with distance, freight, "
+        "product category and seasonality. \"On-time\" is also relative to Olist's "
+        "(generous) estimated delivery date, and only reviewed orders are compared."
     )
 
     fig_dist = px.bar(

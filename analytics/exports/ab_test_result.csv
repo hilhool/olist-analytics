@@ -7,7 +7,8 @@ mean_on_time,4.294
 mean_late,2.566
 u_statistic,530208489.0
 p_value,0.0
+p_value_display,< 1e-300
 cliffs_delta,0.5534
-cliffs_delta_ci_low,0.5422
-cliffs_delta_ci_high,0.5647
+cliffs_delta_ci_low,0.5419
+cliffs_delta_ci_high,0.5654
 effect_size,large
