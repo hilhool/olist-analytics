@@ -1,4 +1,4 @@
-"""Olist E-Commerce Analytics — Streamlit dashboard.
+"""Olist E-Commerce Analytics: Streamlit dashboard.
 
 Reads pre-computed result CSVs from analytics/exports/ (produced by the analysis
 notebook) so the app runs anywhere without the raw dataset, including on
@@ -109,9 +109,9 @@ with tab_rfm:
         st.plotly_chart(fig_rev, use_container_width=True)
 
     st.info(
-        f"Repeat-purchase rate (by `customer_unique_id`): **{repeat_rate:.1f}%** "
-        "— Olist is an overwhelmingly single-purchase marketplace, so segments "
-        "are driven mainly by Recency and Monetary value (Frequency ≈ 1)."
+        f"Repeat-purchase rate (by `customer_unique_id`): **{repeat_rate:.1f}%**. "
+        "Olist is a single-purchase marketplace, so the segments rest on Recency "
+        "and Monetary value (Frequency ≈ 1)."
     )
     st.dataframe(seg, use_container_width=True)
 
@@ -129,9 +129,9 @@ with tab_retention:
     )
     st.plotly_chart(fig_heat, use_container_width=True)
     st.info(
-        "Month 0 is 100% by definition. Retention collapses to well under 1% "
-        "from month 1 onward across every cohort — consistent with the ~3% "
-        "overall repeat rate. The business is acquisition-driven, not retention-driven."
+        "Month 0 is 100% by definition. From month 1 onward retention sits well "
+        "under 1% across every cohort, matching the ~3% overall repeat rate. "
+        "Growth here comes from acquisition rather than retention."
     )
     with st.expander("Cohort data"):
         st.dataframe(ret, use_container_width=True)
@@ -190,16 +190,16 @@ with tab_ab:
 
     verdict = "statistically significant" if (p_value < 0.05) else "not significant"
     st.success(
-        f"On-time orders receive higher review scores — the difference is "
+        f"On-time orders receive higher review scores. The difference is "
         f"**{verdict}** (Mann-Whitney U, p {p_display}) with a **{effect}** "
         f"effect size (Cliff's δ = {delta:.3f}, 95% CI [{ci_low:.3f}, {ci_high:.3f}])."
     )
     st.warning(
         "⚠️ This is an **observational** comparison, not a randomized A/B test. "
-        "On-time vs. late is not randomly assigned, so this measures association, "
-        "not proven causation — lateness is confounded with distance, freight, "
-        "product category and seasonality. \"On-time\" is also relative to Olist's "
-        "(generous) estimated delivery date, and only reviewed orders are compared."
+        "On-time vs. late is not randomly assigned, so it measures association "
+        "rather than proven causation. Lateness ties in with distance, freight, "
+        "product category, and seasonality. On-time is also relative to Olist's "
+        "generous estimated delivery date, and only reviewed orders are compared."
     )
 
     fig_dist = px.bar(
